@@ -10,10 +10,123 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from backend.database import SessionLocal
+from backend.database import SessionLocal, engine, Base
 from backend.models import User, Event, Registration
 from backend.auth import verify_password, hash_password
 from backend.recommendation import get_recommendations_for_user
+
+# -------------------------------------------------------
+# BOOT: Create all tables and seed demo data on startup.
+# This runs ONCE when the Streamlit app first loads —
+# critical on Streamlit Cloud where /tmp DB is empty.
+# -------------------------------------------------------
+@st.cache_resource(show_spinner="Setting up database...")
+def _init_db():
+    """Create tables and seed demo data idempotently."""
+    # Import models so SQLAlchemy knows about them before create_all
+    from backend.models import User, Event, Registration  # noqa: F401
+
+    Base.metadata.create_all(bind=engine)
+
+    db = SessionLocal()
+    try:
+        # Only seed if DB is empty
+        if db.query(User).count() == 0:
+            admin = User(
+                name="College Admin",
+                email="admin@college.edu",
+                password=hash_password("admin123"),
+                college="National Institute of Technology",
+                department="Administration",
+                year="Faculty / Staff",
+                interests="Seminars, Workshops, Entrepreneurship",
+                role="admin"
+            )
+            tejo = User(
+                name="Tejo",
+                email="tejo@gmail.com",
+                password=hash_password("student123"),
+                college="National Institute of Technology",
+                department="CSE",
+                year="3rd Year",
+                interests="AI & Machine Learning, Coding, Hackathons",
+                role="student"
+            )
+            db.add_all([admin, tejo])
+            db.commit()
+            db.refresh(tejo)
+
+            sample_events = [
+                Event(
+                    name="AI Innovation Hackathon",
+                    description="24-hour national hackathon focused on AI agents, machine learning algorithms, and intelligent software solutions with mentorship from tech leaders.",
+                    category="Hackathon", date="2026-11-20", time="10:00 AM",
+                    venue="Computer Lab 3 & 4", organizer="CSE Department",
+                    max_participants=100, registration_deadline="2026-11-18",
+                    image="https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=700&q=80"
+                ),
+                Event(
+                    name="Machine Learning Seminar & Hands-on Lab",
+                    description="Intensive seminar covering generative AI, deep learning, computer vision and neural network optimization with live practical sessions.",
+                    category="Seminars", date="2026-11-25", time="02:00 PM",
+                    venue="Auditorium A", organizer="AI & Data Science Club",
+                    max_participants=150, registration_deadline="2026-11-24",
+                    image="https://images.unsplash.com/photo-1485827404703-89b55fcc595e?auto=format&fit=crop&w=700&q=80"
+                ),
+                Event(
+                    name="Modern Web Development Workshop",
+                    description="Hands-on full-stack development workshop covering Python backend frameworks, reactive UI design and cloud deployments.",
+                    category="Workshops", date="2026-12-02", time="09:30 AM",
+                    venue="Tech Seminar Hall 2", organizer="Web Development Society",
+                    max_participants=80, registration_deadline="2026-12-01",
+                    image="https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=700&q=80"
+                ),
+                Event(
+                    name="Inter-Department Football Tournament",
+                    description="Annual college sports tournament for the Chancellor's Championship Trophy. Refreshments provided.",
+                    category="Sports", date="2026-12-08", time="08:00 AM",
+                    venue="College Sports Ground", organizer="Physical Education Department",
+                    max_participants=160, registration_deadline="2026-12-05",
+                    image="https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=700&q=80"
+                ),
+                Event(
+                    name="Rhythm & Harmony — Cultural Music & Dance Fest",
+                    description="Live band battles, classical dances, contemporary group performances, and cultural art exhibitions.",
+                    category="Cultural", date="2026-12-15", time="05:30 PM",
+                    venue="Open Air Amphitheatre", organizer="Fine Arts & Cultural Club",
+                    max_participants=300, registration_deadline="2026-12-13",
+                    image="https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=700&q=80"
+                ),
+                Event(
+                    name="Campus Startup Pitch & Entrepreneurship Summit",
+                    description="Present your pitch deck to venture capitalists and startup founders. Seed funding grants available for top 3 teams.",
+                    category="Entrepreneurship", date="2026-12-20", time="11:00 AM",
+                    venue="Incubation Center Hall", organizer="E-Cell",
+                    max_participants=75, registration_deadline="2026-12-18",
+                    image="https://images.unsplash.com/photo-1559136555-9303baea8ebd?auto=format&fit=crop&w=700&q=80"
+                ),
+                Event(
+                    name="National Level Competitive Coding Battle",
+                    description="Fast-paced algorithmic programming contest testing dynamic programming, graph algorithms and problem solving.",
+                    category="Coding", date="2026-12-26", time="04:00 PM",
+                    venue="Central Computing Center", organizer="Coding Club",
+                    max_participants=120, registration_deadline="2026-12-25",
+                    image="https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=700&q=80"
+                ),
+            ]
+            db.add_all(sample_events)
+            db.commit()
+
+            # Pre-register Tejo for the first event
+            db.refresh(tejo)
+            first_event = db.query(Event).first()
+            if first_event:
+                db.add(Registration(user_id=tejo.id, event_id=first_event.id))
+                db.commit()
+    finally:
+        db.close()
+
+_init_db()   # Always call at module level so it runs before any page renders
 
 # Set Page Config
 st.set_page_config(
